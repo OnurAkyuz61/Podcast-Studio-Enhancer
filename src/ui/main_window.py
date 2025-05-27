@@ -2,6 +2,7 @@ import os
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from PIL import Image, ImageTk
 from src.ui.drag_drop_area import AudioDropArea
 from src.audio_processing.processor import AudioProcessor
 
@@ -34,14 +35,42 @@ class MainWindow:
         # Initialize variables
         self.audio_file = None
         self.processing_thread = None
+        self.file_selected = False  # Track if a file has been selected
         
         # Setup UI
         self.setup_ui()
         
     def setup_ui(self):
+        # Create menu bar
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # Create File menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Dosya", menu=file_menu)
+        file_menu.add_command(label="Ses Dosyası Seç", command=self.browse_file)
+        file_menu.add_separator()
+        file_menu.add_command(label="Çıkış", command=self.root.quit)
+        
         # Create main frame
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Add logo
+        try:
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+                                    'assets', 'logo', 'podcast-studio-enhencer-logo.png')
+            logo_image = Image.open(logo_path)
+            # Resize the logo to an appropriate size
+            logo_image = logo_image.resize((150, 150), Image.LANCZOS)
+            logo_photo = ImageTk.PhotoImage(logo_image)
+            
+            # Create a label for the logo
+            logo_label = ttk.Label(main_frame, image=logo_photo, background='#2e2e2e')
+            logo_label.image = logo_photo  # Keep a reference to prevent garbage collection
+            logo_label.pack(pady=(0, 10))
+        except Exception as e:
+            print(f"Error loading logo: {e}")
         
         # Add title
         title_label = ttk.Label(
@@ -55,7 +84,7 @@ class MainWindow:
         # Add subtitle
         subtitle_label = ttk.Label(
             main_frame, 
-            text="Ses kayıtlarınızı profesyonel podcast kalitesine dönüştürün",
+            text="Ses kayıtlarınızı profesyonel stüdyo kalitesine dönüştürün",
             font=("Arial", 12),
             foreground="white"
         )
@@ -86,14 +115,15 @@ class MainWindow:
         )
         self.file_info_label.pack(pady=5)
         
-        # Add browse button
-        browse_button = ttk.Button(
+        # Add start button (initially disabled)
+        self.start_button = ttk.Button(
             main_frame, 
-            text="Ses Dosyası Seç",
-            command=self.browse_file,
+            text="İyileştirmeyi Başlat",
+            command=self.process_audio,
+            state="disabled",
             style="TButton"
         )
-        browse_button.pack(pady=10, ipady=5, fill="x")
+        self.start_button.pack(pady=10, ipady=10, fill="x")
         
         # Add settings frame
         settings_frame = ttk.LabelFrame(
@@ -149,32 +179,26 @@ class MainWindow:
         self.comp_slider.set(50)
         self.comp_slider.pack(side="left", fill="x", expand=True, padx=10)
         
-        # Add EQ preset selector
+        # Add EQ preset settings
         eq_frame = ttk.Frame(settings_frame)
         eq_frame.pack(fill="x", pady=5)
         
-        eq_label = ttk.Label(eq_frame, text="EQ Profili:", foreground="white")
+        eq_label = ttk.Label(eq_frame, text="EQ Önayarı:", foreground="white")
         eq_label.pack(side="left")
         
         self.eq_combo = ttk.Combobox(
-            eq_frame, 
-            values=["Doğal", "Sıcak", "Parlak", "Derin", "Özel"],
+            eq_frame,
+            values=["Stüdyo", "Doğal", "Sıcak", "Parlak", "Derin", "Özel"],
+            width=15,
             state="readonly"
         )
-        self.eq_combo.current(0)  # Set default to "Doğal"
+        self.eq_combo.current(0)  # Set default to "Stüdyo"
         self.eq_combo.pack(side="left", padx=10, fill="x", expand=True)
         
         # Progress variable (will be used in popup)
         self.progress_var = tk.IntVar()
         
-        # Add process button
-        self.process_button = ttk.Button(
-            main_frame, 
-            text="İyileştirmeyi Başlat",
-            command=self.process_audio,
-            state="disabled"
-        )
-        self.process_button.pack(pady=10, ipady=10, fill="x")
+        # Process button is now the start button defined above
     
     def browse_file(self):
         file_path = filedialog.askopenfilename(
@@ -189,19 +213,35 @@ class MainWindow:
             self.set_audio_file(file_path)
     
     def set_audio_file(self, file_path):
-        self.audio_file = file_path
-        file_name = os.path.basename(file_path)
-        self.file_info_label.config(text=f"Seçilen dosya: {file_name}")
-        self.process_button.config(state="normal")
-        self.drop_area.set_file_loaded(True, file_name)
+        if os.path.exists(file_path):  # Verify the file exists
+            self.audio_file = file_path
+            self.file_selected = True  # Mark that a file has been selected
+            file_name = os.path.basename(file_path)
+            self.file_info_label.config(text=f"Seçilen dosya: {file_name}")
+            self.start_button.config(state="normal")
+            self.drop_area.set_file_loaded(True, file_name)
+        else:
+            messagebox.showerror("Hata", "Seçilen dosya bulunamadı.")
+            self.file_selected = False
+            self.audio_file = None
+            self.file_info_label.config(text="Henüz bir ses dosyası seçilmedi")
+            self.start_button.config(state="disabled")
+            self.drop_area.set_file_loaded(False)
     
     def process_audio(self):
-        if not self.audio_file:
+        # Double check that we have a valid file
+        if not self.file_selected or not self.audio_file or not os.path.exists(self.audio_file):
             messagebox.showwarning("Uyarı", "Lütfen önce bir ses dosyası seçin.")
+            # Reset file selection state
+            self.file_selected = False
+            self.audio_file = None
+            self.file_info_label.config(text="Henüz bir ses dosyası seçilmedi")
+            self.start_button.config(state="disabled")
+            self.drop_area.set_file_loaded(False)
             return
         
         # Disable UI elements during processing
-        self.process_button.config(state="disabled")
+        self.start_button.config(state="disabled")
         self.progress_var.set(0)
         
         # Create progress dialog
@@ -294,26 +334,78 @@ class MainWindow:
         if hasattr(self, 'progress_dialog') and self.progress_dialog.winfo_exists():
             self.progress_dialog.destroy()
         
-        # Re-enable process button
-        self.process_button.config(state="normal")
+        # Re-enable start button
+        self.start_button.config(state="normal")
         
-        result = messagebox.askquestion(
-            "İşlem Tamamlandı",
-            f"Ses dosyası başarıyla işlendi ve kaydedildi:\n{output_file}\n\nDosyayı içeren klasörü açmak ister misiniz?",
-            icon="info"
+        # Create a custom completion dialog
+        completion_dialog = tk.Toplevel(self.root)
+        completion_dialog.title("İşlem Tamamlandı")
+        completion_dialog.geometry("500x250")
+        completion_dialog.resizable(False, False)
+        completion_dialog.transient(self.root)  # Set as transient to main window
+        completion_dialog.grab_set()  # Make dialog modal
+        
+        # Center the dialog
+        window_width = 500
+        window_height = 250
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        center_x = int(screen_width/2 - window_width/2)
+        center_y = int(screen_height/2 - window_height/2)
+        completion_dialog.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+        
+        # Configure dialog style
+        completion_dialog.configure(bg="#2e2e2e")
+        
+        # Add success message
+        success_label = ttk.Label(
+            completion_dialog,
+            text="İşlem Başarıyla Tamamlandı!",
+            font=("Arial", 16, "bold"),
+            foreground="#aaffaa",
+            background="#2e2e2e"
         )
+        success_label.pack(pady=(20, 10))
         
-        if result == "yes":
-            # Open the folder containing the output file
-            os.system(f'open -R "{output_file}"')
+        # Add file info
+        file_name = os.path.basename(output_file)
+        file_info_label = ttk.Label(
+            completion_dialog,
+            text=f"Dosya kaydedildi:\n{file_name}",
+            font=("Arial", 12),
+            foreground="white",
+            background="#2e2e2e",
+            justify="center"
+        )
+        file_info_label.pack(pady=(0, 20))
+        
+        # Add buttons frame
+        buttons_frame = ttk.Frame(completion_dialog, style="TFrame")
+        buttons_frame.pack(fill="x", padx=20, pady=10)
+        
+        # Add open folder button
+        open_folder_button = ttk.Button(
+            buttons_frame,
+            text="Klasörü Aç",
+            command=lambda: os.system(f'open -R "{output_file}"') or completion_dialog.destroy()
+        )
+        open_folder_button.pack(side="left", padx=10, fill="x", expand=True)
+        
+        # Add close button
+        close_button = ttk.Button(
+            buttons_frame,
+            text="Kapat",
+            command=completion_dialog.destroy
+        )
+        close_button.pack(side="right", padx=10, fill="x", expand=True)
     
     def processing_error(self, error_message):
         # Close progress dialog if it exists
         if hasattr(self, 'progress_dialog') and self.progress_dialog.winfo_exists():
             self.progress_dialog.destroy()
             
-        # Re-enable process button
-        self.process_button.config(state="normal")
+        # Re-enable start button
+        self.start_button.config(state="normal")
         
         messagebox.showerror("Hata", f"İşlem sırasında bir hata oluştu:\n{error_message}")
 

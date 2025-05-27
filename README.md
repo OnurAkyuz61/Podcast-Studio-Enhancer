@@ -150,6 +150,7 @@ Uygulama, ses dosyasını aşağıdaki adımlarla işler:
 
 Uygulama şu EQ profillerini sunar:
 
+- **Stüdyo**: Profesyonel stüdyo kalitesinde ses için optimize edilmiş ayar (varsayılan)
 - **Doğal**: Hafif orta frekans artışı ile net ses
 - **Sıcak**: Alttaki frekansları artırarak sıcak bir ton
 - **Parlak**: Yüksek frekansları artırarak parlak ve net ses

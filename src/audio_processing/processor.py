@@ -45,7 +45,7 @@ class AudioProcessor:
             progress_callback(30)
             
         # Apply EQ based on preset
-        eq_preset = settings.get('eq_preset', 'Doğal')
+        eq_preset = settings.get('eq_preset', 'Stüdyo')  # Default to Studio preset
         y = self._apply_eq(y, sr, eq_preset)
         
         # Update progress
@@ -104,6 +104,15 @@ class AudioProcessor:
             stationary=True
         )
         
+        # For studio quality, apply a second pass with more gentle settings on higher amounts
+        if amount > 0.6:
+            reduced_noise = nr.reduce_noise(
+                y=reduced_noise,
+                sr=sr,
+                prop_decrease=amount * 0.5,  # Gentler second pass
+                stationary=True
+            )
+        
         return reduced_noise
     
     def _apply_eq(self, y, sr, preset):
@@ -140,6 +149,20 @@ class AudioProcessor:
                 (400, 1.1),   # Boost low mids
                 (3000, 0.9),  # Reduce high mids
                 (8000, 0.8)   # Reduce highs
+            ])
+        elif preset == 'Stüdyo':
+            # Professional studio sound with clarity and presence
+            return self._apply_eq_filter(y, sr, [
+                (60, 0.7),    # Reduce sub-bass rumble
+                (120, 1.1),   # Slight boost to bass for warmth
+                (250, 0.9),   # Cut muddiness
+                (500, 0.95),  # Slight cut to prevent boxiness
+                (1000, 1.05), # Slight boost for presence
+                (2000, 1.15), # Boost for vocal clarity
+                (3500, 1.25), # Boost for presence and articulation
+                (5000, 1.2),  # Boost for presence
+                (8000, 1.1),  # Slight boost for air
+                (12000, 1.15) # Boost for sparkle and air
             ])
         else:  # 'Özel' or any other preset
             # Balanced EQ
@@ -186,6 +209,10 @@ class AudioProcessor:
                     y_compressed[i] = -y_compressed[i]
             else:
                 y_compressed[i] = y[i]
+        
+        # Apply a slight makeup gain to compensate for compression
+        makeup_gain = 1.0 + (amount * 0.3)  # More compression = more makeup gain
+        y_compressed = y_compressed * makeup_gain
         
         return y_compressed
     
